@@ -5,6 +5,7 @@ import br.com.supportchat.util.CryptoUtils;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.List;
 
@@ -20,10 +21,10 @@ public class ClientHandler implements Runnable {
 
     @Override
     public void run() {
-        try {
-            BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
+        try (
+                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)
+        ) {
             String message;
 
             while ((message = reader.readLine()) != null) {
@@ -32,7 +33,10 @@ public class ClientHandler implements Runnable {
                 System.out.println("Mensagem recebida (criptografada): " + message);
                 System.out.println("Mensagem descriptografada: " + decrypted);
 
-                processMessage(decrypted);
+                String response = processMessage(decrypted);
+                if (response != null) {
+                    writer.println(CryptoUtils.encrypt(response));
+                }
             }
 
         } catch (IOException e) {
@@ -40,19 +44,20 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void processMessage(String decrypted) {
+    private String processMessage(String decrypted) {
         if (decrypted.startsWith("TICKET|")) {
-            processTicketCreation(decrypted);
+            return processTicketCreation(decrypted);
         } else if (decrypted.startsWith("LISTAR|")) {
-            processListTickets();
+            return processListTickets();
         } else if (decrypted.startsWith("ASSUMIR|")) {
-            processAssignTicket(decrypted);
+            return processAssignTicket(decrypted);
         } else {
             System.out.println("Mensagem comum recebida: " + decrypted);
+            return "OK|Mensagem recebida";
         }
     }
 
-    private void processTicketCreation(String decrypted) {
+    private String processTicketCreation(String decrypted) {
         String[] parts = decrypted.split("\\|", 4);
 
         if (parts.length == 4) {
@@ -69,28 +74,42 @@ public class ClientHandler implements Runnable {
             System.out.println("Descrição: " + ticket.getDescricao());
             System.out.println("Status: " + ticket.getStatus());
             System.out.println("=====================");
-        } else {
-            System.out.println("Formato de ticket inválido.");
+
+            return "OK|Ticket criado com ID " + ticket.getId();
         }
+
+        return "ERRO|Formato de ticket inválido";
     }
 
-    private void processListTickets() {
+    private String processListTickets() {
         List<Ticket> tickets = ticketManager.listTickets();
 
         System.out.println("=== LISTA DE TICKETS ===");
 
         if (tickets.isEmpty()) {
             System.out.println("Nenhum ticket cadastrado.");
-        } else {
-            for (Ticket ticket : tickets) {
-                System.out.println(ticket);
-            }
+            System.out.println("========================");
+            return "LISTA|Nenhum ticket cadastrado.";
+        }
+
+        StringBuilder builder = new StringBuilder("LISTA|");
+
+        for (Ticket ticket : tickets) {
+            System.out.println(ticket);
+
+            builder.append(ticket.getId()).append(";")
+                    .append(ticket.getClienteNome()).append(";")
+                    .append(ticket.getCategoria()).append(";")
+                    .append(ticket.getStatus()).append(";")
+                    .append(ticket.getTecnicoNome() == null ? "-" : ticket.getTecnicoNome())
+                    .append("#");
         }
 
         System.out.println("========================");
+        return builder.toString();
     }
 
-    private void processAssignTicket(String decrypted) {
+    private String processAssignTicket(String decrypted) {
         String[] parts = decrypted.split("\\|", 3);
 
         if (parts.length == 3) {
@@ -100,8 +119,7 @@ public class ClientHandler implements Runnable {
             try {
                 ticketId = Integer.parseInt(parts[2]);
             } catch (NumberFormatException e) {
-                System.out.println("ID do ticket inválido.");
-                return;
+                return "ERRO|ID do ticket inválido";
             }
 
             boolean assigned = ticketManager.assignTechnician(ticketId, tecnicoNome);
@@ -113,12 +131,13 @@ public class ClientHandler implements Runnable {
                 System.out.println("Ticket #" + ticket.getId() + " assumido por " + tecnicoNome);
                 System.out.println("Status: " + ticket.getStatus());
                 System.out.println("=============================");
-            } else {
-                System.out.println("Não foi possível assumir o ticket " + ticketId + ".");
+
+                return "OK|Ticket " + ticketId + " assumido com sucesso";
             }
 
-        } else {
-            System.out.println("Formato de atribuição inválido.");
+            return "ERRO|Não foi possível assumir o ticket " + ticketId;
         }
+
+        return "ERRO|Formato de atribuição inválido";
     }
 }
