@@ -13,9 +13,9 @@ public class ClientGUI {
         if (connected) {
             System.out.println("Cliente conectado!");
 
-            String mensagemTicket = "TICKET|Sara|Servidor|Servidor caiu e está sem acesso";
+            String mensagem = "ASSUMIR|Carlos|1";
 
-            String encrypted = CryptoUtils.encrypt(mensagemTicket);
+            String encrypted = CryptoUtils.encrypt(mensagem);
 
             connection.sendMessage(encrypted);
 
