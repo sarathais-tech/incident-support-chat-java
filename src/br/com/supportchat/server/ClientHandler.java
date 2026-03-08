@@ -56,12 +56,46 @@ public class ClientHandler implements Runnable {
             return processListTickets();
         } else if (decrypted.startsWith("ASSUMIR|")) {
             return processAssignTicket(decrypted, writer);
+        }else if (decrypted.startsWith("REGISTRAR_CLIENTE|")) {
+            return processRegisterClient(decrypted, writer);
         } else if (decrypted.startsWith("CHAT|")) {
             return processChatMessage(decrypted);
         } else {
             System.out.println("Mensagem comum recebida: " + decrypted);
             return "OK|Mensagem recebida";
+        } 
+    }
+
+    private String processRegisterClient(String decrypted, PrintWriter writer) {
+        String[] parts = decrypted.split("\\|", 3);
+
+        if (parts.length != 3) {
+            return "ERRO|Formato de registro de cliente inválido";
         }
+
+        String clienteNome = parts[1];
+        int ticketId;
+
+        try {
+            ticketId = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException e) {
+            return "ERRO|ID do ticket inválido";
+        }
+
+        Ticket ticket = ticketManager.findById(ticketId);
+        if (ticket == null) {
+            return "ERRO|Ticket não encontrado";
+        }
+
+        if (!ticket.getClienteNome().equals(clienteNome)) {
+            return "ERRO|Cliente não autorizado para esse ticket";
+        }
+
+        clientTicketWriters.put(ticketId, writer);
+
+        System.out.println("[CHAT] Cliente " + clienteNome + " registrado no ticket " + ticketId);
+
+        return "OK|Cliente registrado no chat do ticket " + ticketId;
     }
 
     private String processTicketCreation(String decrypted, PrintWriter writer) {

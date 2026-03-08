@@ -248,58 +248,62 @@ public class ClientGUI extends JFrame {
     }
 
     private void conectarChat() {
-        String nome = txtNome.getText().trim();
-        String ticketIdText = txtTicketId.getText().trim();
+    String nome = txtNome.getText().trim();
+    String ticketIdText = txtTicketId.getText().trim();
 
-        if (nome.isEmpty()) {
-            appendOutput("Informe o nome.");
-            return;
-        }
-
-        if (ticketIdText.isEmpty()) {
-            appendOutput("Informe o ID do ticket.");
-            return;
-        }
-
-        int ticketId;
-        try {
-            ticketId = Integer.parseInt(ticketIdText);
-        } catch (NumberFormatException e) {
-            appendOutput("ID do ticket inválido.");
-            return;
-        }
-
-        if (persistentConnection != null) {
-            persistentConnection.disconnect();
-        }
-
-        persistentConnection = createConnection();
-        if (persistentConnection == null) {
-            return;
-        }
-
-        currentChatTicketId = ticketId;
-        txtChat.setText("");
-        appendChat("Chat conectado ao ticket " + ticketId + ".");
-
-        if (rbTecnico.isSelected()) {
-            String response = persistentConnection.sendAndReceive("ASSUMIR|" + nome + "|" + ticketId);
-            appendOutput("Resposta do servidor: " + response);
-        }
-
-        persistentConnection.startListening(new ClientConnection.MessageListener() {
-            @Override
-            public void onMessageReceived(String message) {
-                SwingUtilities.invokeLater(() -> handleIncomingMessage(message));
-            }
-
-            @Override
-            public void onError(String error) {
-                SwingUtilities.invokeLater(() -> appendOutput(error));
-            }
-        });
+    if (nome.isEmpty()) {
+        appendOutput("Informe o nome.");
+        return;
     }
 
+    if (ticketIdText.isEmpty()) {
+        appendOutput("Informe o ID do ticket.");
+        return;
+    }
+
+    int ticketId;
+    try {
+        ticketId = Integer.parseInt(ticketIdText);
+    } catch (NumberFormatException e) {
+        appendOutput("ID do ticket inválido.");
+        return;
+    }
+
+    if (persistentConnection != null) {
+        persistentConnection.disconnect();
+    }
+
+    persistentConnection = createConnection();
+    if (persistentConnection == null) {
+        return;
+    }
+
+    currentChatTicketId = ticketId;
+    txtChat.setText("");
+    appendChat("Chat conectado ao ticket " + ticketId + ".");
+
+    String response;
+
+    if (rbTecnico.isSelected()) {
+        response = persistentConnection.sendAndReceive("ASSUMIR|" + nome + "|" + ticketId);
+        appendOutput("Resposta do servidor: " + response);
+    } else {
+        response = persistentConnection.sendAndReceive("REGISTRAR_CLIENTE|" + nome + "|" + ticketId);
+        appendOutput("Resposta do servidor: " + response);
+    }
+
+    persistentConnection.startListening(new ClientConnection.MessageListener() {
+        @Override
+        public void onMessageReceived(String message) {
+            SwingUtilities.invokeLater(() -> handleIncomingMessage(message));
+        }
+
+        @Override
+        public void onError(String error) {
+            SwingUtilities.invokeLater(() -> appendOutput(error));
+        }
+    });
+}
     private void enviarMensagemChat() {
         if (persistentConnection == null || currentChatTicketId == null) {
             appendOutput("Conecte o chat primeiro.");
