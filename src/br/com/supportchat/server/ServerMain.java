@@ -7,6 +7,7 @@ import java.net.Socket;
 public class ServerMain {
 
     private static final int PORT = 5000;
+    private static final TicketManager ticketManager = new TicketManager();
 
     public static void main(String[] args) {
 
@@ -16,15 +17,12 @@ public class ServerMain {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
 
             while (true) {
-
                 Socket clientSocket = serverSocket.accept();
 
                 System.out.println("Novo cliente conectado: " + clientSocket.getInetAddress());
 
-                ClientHandler handler = new ClientHandler(clientSocket);
-
+                ClientHandler handler = new ClientHandler(clientSocket, ticketManager);
                 new Thread(handler).start();
-
             }
 
         } catch (IOException e) {

@@ -11,21 +11,17 @@ public class ClientGUI {
         boolean connected = connection.connect("127.0.0.1", 5000);
 
         if (connected) {
-
             System.out.println("Cliente conectado!");
 
-            String mensagem = "Servidor caiu";
+            String mensagemTicket = "TICKET|Sara|Servidor|Servidor caiu e está sem acesso";
 
-            String encrypted = CryptoUtils.encrypt(mensagem);
+            String encrypted = CryptoUtils.encrypt(mensagemTicket);
 
             connection.sendMessage(encrypted);
 
             connection.disconnect();
-
         } else {
-
             System.out.println("Falha ao conectar.");
-
         }
     }
 }
