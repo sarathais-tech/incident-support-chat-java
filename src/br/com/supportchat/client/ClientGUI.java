@@ -248,6 +248,11 @@ public class ClientGUI extends JFrame {
     }
 
     private void conectarChat() {
+    if (persistentConnection != null && currentChatTicketId != null) {
+        appendOutput("O chat já está conectado para este ticket.");
+        return;
+    }
+
     String nome = txtNome.getText().trim();
     String ticketIdText = txtTicketId.getText().trim();
 
@@ -292,6 +297,16 @@ public class ClientGUI extends JFrame {
         appendOutput("Resposta do servidor: " + response);
     }
 
+    if (response.startsWith("ERRO|")) {
+        persistentConnection.disconnect();
+        persistentConnection = null;
+        currentChatTicketId = null;
+        appendOutput("Não foi possível conectar o chat.");
+        return;
+    }
+
+    btnConectarChat.setEnabled(false);
+
     persistentConnection.startListening(new ClientConnection.MessageListener() {
         @Override
         public void onMessageReceived(String message) {
@@ -300,7 +315,12 @@ public class ClientGUI extends JFrame {
 
         @Override
         public void onError(String error) {
-            SwingUtilities.invokeLater(() -> appendOutput(error));
+            SwingUtilities.invokeLater(() -> {
+                appendOutput(error);
+                btnConectarChat.setEnabled(true);
+                persistentConnection = null;
+                currentChatTicketId = null;
+            });
         }
     });
 }
