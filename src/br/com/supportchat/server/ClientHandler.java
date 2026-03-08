@@ -8,8 +8,13 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientHandler implements Runnable {
+
+    private static final Map<Integer, PrintWriter> clientTicketWriters = new ConcurrentHashMap<>();
+    private static final Map<Integer, PrintWriter> technicianTicketWriters = new ConcurrentHashMap<>();
 
     private final Socket socket;
     private final TicketManager ticketManager;
@@ -33,7 +38,7 @@ public class ClientHandler implements Runnable {
                 System.out.println("Mensagem recebida (criptografada): " + message);
                 System.out.println("Mensagem descriptografada: " + decrypted);
 
-                String response = processMessage(decrypted);
+                String response = processMessage(decrypted, writer);
                 if (response != null) {
                     writer.println(CryptoUtils.encrypt(response));
                 }
@@ -44,20 +49,22 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private String processMessage(String decrypted) {
+    private String processMessage(String decrypted, PrintWriter writer) {
         if (decrypted.startsWith("TICKET|")) {
-            return processTicketCreation(decrypted);
+            return processTicketCreation(decrypted, writer);
         } else if (decrypted.startsWith("LISTAR|")) {
             return processListTickets();
         } else if (decrypted.startsWith("ASSUMIR|")) {
-            return processAssignTicket(decrypted);
+            return processAssignTicket(decrypted, writer);
+        } else if (decrypted.startsWith("CHAT|")) {
+            return processChatMessage(decrypted);
         } else {
             System.out.println("Mensagem comum recebida: " + decrypted);
             return "OK|Mensagem recebida";
         }
     }
 
-    private String processTicketCreation(String decrypted) {
+    private String processTicketCreation(String decrypted, PrintWriter writer) {
         String[] parts = decrypted.split("\\|", 4);
 
         if (parts.length == 4) {
@@ -66,6 +73,7 @@ public class ClientHandler implements Runnable {
             String descricao = parts[3];
 
             Ticket ticket = ticketManager.createTicket(clienteNome, categoria, descricao);
+            clientTicketWriters.put(ticket.getId(), writer);
 
             System.out.println("=== TICKET CRIADO ===");
             System.out.println("ID: " + ticket.getId());
@@ -109,7 +117,7 @@ public class ClientHandler implements Runnable {
         return builder.toString();
     }
 
-    private String processAssignTicket(String decrypted) {
+    private String processAssignTicket(String decrypted, PrintWriter writer) {
         String[] parts = decrypted.split("\\|", 3);
 
         if (parts.length == 3) {
@@ -126,11 +134,19 @@ public class ClientHandler implements Runnable {
 
             if (assigned) {
                 Ticket ticket = ticketManager.findById(ticketId);
+                technicianTicketWriters.put(ticketId, writer);
 
                 System.out.println("=== TICKET EM ATENDIMENTO ===");
                 System.out.println("Ticket #" + ticket.getId() + " assumido por " + tecnicoNome);
                 System.out.println("Status: " + ticket.getStatus());
                 System.out.println("=============================");
+
+                PrintWriter clientWriter = clientTicketWriters.get(ticketId);
+                if (clientWriter != null) {
+                    clientWriter.println(CryptoUtils.encrypt(
+                            "CHAT|Sistema|Ticket " + ticketId + " agora está em atendimento por " + tecnicoNome
+                    ));
+                }
 
                 return "OK|Ticket " + ticketId + " assumido com sucesso";
             }
@@ -139,5 +155,51 @@ public class ClientHandler implements Runnable {
         }
 
         return "ERRO|Formato de atribuição inválido";
+    }
+
+    private String processChatMessage(String decrypted) {
+        String[] parts = decrypted.split("\\|", 4);
+
+        if (parts.length != 4) {
+            return "ERRO|Formato de chat inválido";
+        }
+
+        String sender = parts[1];
+        int ticketId;
+        String chatMessage = parts[3];
+
+        try {
+            ticketId = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException e) {
+            return "ERRO|ID do ticket inválido";
+        }
+
+        Ticket ticket = ticketManager.findById(ticketId);
+        if (ticket == null) {
+            return "ERRO|Ticket não encontrado";
+        }
+
+        String responseMessage = "CHAT|" + sender + "|" + chatMessage;
+
+        PrintWriter clientWriter = clientTicketWriters.get(ticketId);
+        PrintWriter technicianWriter = technicianTicketWriters.get(ticketId);
+
+        if (sender.equals(ticket.getClienteNome())) {
+            if (technicianWriter != null) {
+                technicianWriter.println(CryptoUtils.encrypt(responseMessage));
+            }
+            System.out.println("[CHAT] Ticket " + ticketId + " | Cliente " + sender + ": " + chatMessage);
+            return "OK|Mensagem enviada";
+        }
+
+        if (ticket.getTecnicoNome() != null && sender.equals(ticket.getTecnicoNome())) {
+            if (clientWriter != null) {
+                clientWriter.println(CryptoUtils.encrypt(responseMessage));
+            }
+            System.out.println("[CHAT] Ticket " + ticketId + " | Técnico " + sender + ": " + chatMessage);
+            return "OK|Mensagem enviada";
+        }
+
+        return "ERRO|Usuário não autorizado para esse ticket";
     }
 }

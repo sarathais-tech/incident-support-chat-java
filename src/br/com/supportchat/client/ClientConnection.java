@@ -9,9 +9,15 @@ import java.net.Socket;
 
 public class ClientConnection {
 
+    public interface MessageListener {
+        void onMessageReceived(String message);
+        void onError(String error);
+    }
+
     private Socket socket;
     private PrintWriter writer;
     private BufferedReader reader;
+    private Thread listenerThread;
 
     public boolean connect(String host, int port) {
         try {
@@ -39,6 +45,30 @@ public class ClientConnection {
         } catch (IOException e) {
             return "ERRO|" + e.getMessage();
         }
+    }
+
+    public void sendOnly(String plainMessage) {
+        if (writer != null) {
+            String encrypted = CryptoUtils.encrypt(plainMessage);
+            writer.println(encrypted);
+        }
+    }
+
+    public void startListening(MessageListener listener) {
+        listenerThread = new Thread(() -> {
+            try {
+                String response;
+                while (socket != null && !socket.isClosed() && (response = reader.readLine()) != null) {
+                    String decrypted = CryptoUtils.decrypt(response);
+                    listener.onMessageReceived(decrypted);
+                }
+            } catch (IOException e) {
+                listener.onError("Conexão encerrada: " + e.getMessage());
+            }
+        });
+
+        listenerThread.setDaemon(true);
+        listenerThread.start();
     }
 
     public void disconnect() {

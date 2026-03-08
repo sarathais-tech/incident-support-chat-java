@@ -16,17 +16,25 @@ public class ClientGUI extends JFrame {
             "Servidor", "Banco de Dados", "Rede", "Aplicação", "Segurança"
     });
 
-    private final JTextArea txtDescricao = new JTextArea(5, 30);
-    private final JTextArea txtSaida = new JTextArea(15, 40);
+    private final JTextArea txtDescricao = new JTextArea(4, 30);
+    private final JTextArea txtSaida = new JTextArea(10, 40);
+    private final JTextArea txtChat = new JTextArea(10, 40);
+
     private final JTextField txtTicketId = new JTextField(10);
+    private final JTextField txtMensagem = new JTextField(30);
 
     private final JButton btnAbrirTicket = new JButton("Abrir Ticket");
     private final JButton btnListarTickets = new JButton("Listar Tickets");
     private final JButton btnAssumirTicket = new JButton("Assumir Ticket");
+    private final JButton btnConectarChat = new JButton("Conectar Chat");
+    private final JButton btnEnviarMensagem = new JButton("Enviar Mensagem");
+
+    private ClientConnection persistentConnection;
+    private Integer currentChatTicketId = null;
 
     public ClientGUI() {
         setTitle("Incident Support Chat");
-        setSize(700, 600);
+        setSize(800, 720);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -71,7 +79,7 @@ public class ClientGUI extends JFrame {
 
         add(topPanel, BorderLayout.NORTH);
 
-        JPanel centerPanel = new JPanel(new BorderLayout());
+        JPanel centerPanel = new JPanel(new GridLayout(3, 1));
 
         JPanel descriptionPanel = new JPanel(new BorderLayout());
         descriptionPanel.setBorder(BorderFactory.createTitledBorder("Descrição"));
@@ -86,8 +94,25 @@ public class ClientGUI extends JFrame {
         txtSaida.setWrapStyleWord(true);
         outputPanel.add(new JScrollPane(txtSaida), BorderLayout.CENTER);
 
-        centerPanel.add(descriptionPanel, BorderLayout.NORTH);
-        centerPanel.add(outputPanel, BorderLayout.CENTER);
+        JPanel chatPanel = new JPanel(new BorderLayout());
+        chatPanel.setBorder(BorderFactory.createTitledBorder("Chat do Ticket"));
+        txtChat.setEditable(false);
+        txtChat.setLineWrap(true);
+        txtChat.setWrapStyleWord(true);
+
+        JPanel chatInputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        chatInputPanel.add(new JLabel("Mensagem:"));
+        txtMensagem.setPreferredSize(new Dimension(400, 25));
+        chatInputPanel.add(txtMensagem);
+        chatInputPanel.add(btnConectarChat);
+        chatInputPanel.add(btnEnviarMensagem);
+
+        chatPanel.add(new JScrollPane(txtChat), BorderLayout.CENTER);
+        chatPanel.add(chatInputPanel, BorderLayout.SOUTH);
+
+        centerPanel.add(descriptionPanel);
+        centerPanel.add(outputPanel);
+        centerPanel.add(chatPanel);
 
         add(centerPanel, BorderLayout.CENTER);
 
@@ -106,6 +131,8 @@ public class ClientGUI extends JFrame {
         btnAbrirTicket.addActionListener(e -> abrirTicket());
         btnListarTickets.addActionListener(e -> listarTickets());
         btnAssumirTicket.addActionListener(e -> assumirTicket());
+        btnConectarChat.addActionListener(e -> conectarChat());
+        btnEnviarMensagem.addActionListener(e -> enviarMensagemChat());
     }
 
     private void updateMode() {
@@ -117,7 +144,7 @@ public class ClientGUI extends JFrame {
 
         btnListarTickets.setEnabled(!cliente);
         btnAssumirTicket.setEnabled(!cliente);
-        txtTicketId.setEnabled(!cliente);
+        txtTicketId.setEnabled(true);
     }
 
     private ClientConnection createConnection() {
@@ -168,6 +195,11 @@ public class ClientGUI extends JFrame {
         connection.disconnect();
 
         appendOutput("Resposta do servidor: " + response);
+
+        if (response.startsWith("OK|Ticket criado com ID ")) {
+            String id = response.replace("OK|Ticket criado com ID ", "").trim();
+            txtTicketId.setText(id);
+        }
     }
 
     private void listarTickets() {
@@ -215,6 +247,95 @@ public class ClientGUI extends JFrame {
         appendOutput("Resposta do servidor: " + response);
     }
 
+    private void conectarChat() {
+        String nome = txtNome.getText().trim();
+        String ticketIdText = txtTicketId.getText().trim();
+
+        if (nome.isEmpty()) {
+            appendOutput("Informe o nome.");
+            return;
+        }
+
+        if (ticketIdText.isEmpty()) {
+            appendOutput("Informe o ID do ticket.");
+            return;
+        }
+
+        int ticketId;
+        try {
+            ticketId = Integer.parseInt(ticketIdText);
+        } catch (NumberFormatException e) {
+            appendOutput("ID do ticket inválido.");
+            return;
+        }
+
+        if (persistentConnection != null) {
+            persistentConnection.disconnect();
+        }
+
+        persistentConnection = createConnection();
+        if (persistentConnection == null) {
+            return;
+        }
+
+        currentChatTicketId = ticketId;
+        txtChat.setText("");
+        appendChat("Chat conectado ao ticket " + ticketId + ".");
+
+        if (rbTecnico.isSelected()) {
+            String response = persistentConnection.sendAndReceive("ASSUMIR|" + nome + "|" + ticketId);
+            appendOutput("Resposta do servidor: " + response);
+        }
+
+        persistentConnection.startListening(new ClientConnection.MessageListener() {
+            @Override
+            public void onMessageReceived(String message) {
+                SwingUtilities.invokeLater(() -> handleIncomingMessage(message));
+            }
+
+            @Override
+            public void onError(String error) {
+                SwingUtilities.invokeLater(() -> appendOutput(error));
+            }
+        });
+    }
+
+    private void enviarMensagemChat() {
+        if (persistentConnection == null || currentChatTicketId == null) {
+            appendOutput("Conecte o chat primeiro.");
+            return;
+        }
+
+        String nome = txtNome.getText().trim();
+        String mensagem = txtMensagem.getText().trim();
+
+        if (nome.isEmpty()) {
+            appendOutput("Informe o nome.");
+            return;
+        }
+
+        if (mensagem.isEmpty()) {
+            return;
+        }
+
+        String request = "CHAT|" + nome + "|" + currentChatTicketId + "|" + mensagem;
+        persistentConnection.sendOnly(request);
+
+        appendChat("Você: " + mensagem);
+        txtMensagem.setText("");
+    }
+
+    private void handleIncomingMessage(String message) {
+        if (message.startsWith("CHAT|")) {
+            String[] parts = message.split("\\|", 3);
+            if (parts.length == 3) {
+                appendChat(parts[1] + ": " + parts[2]);
+            }
+        } else {
+            appendOutput("Resposta do servidor: " + message);
+        }
+    }
+
     private void formatListResponse(String response) {
         txtSaida.setText("");
 
@@ -253,6 +374,10 @@ public class ClientGUI extends JFrame {
 
     private void appendOutput(String text) {
         txtSaida.append(text + "\n");
+    }
+
+    private void appendChat(String text) {
+        txtChat.append(text + "\n");
     }
 
     public static void main(String[] args) {

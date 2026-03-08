@@ -1,7 +1,6 @@
 package br.com.supportchat.server;
 
 import br.com.supportchat.model.Ticket;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,12 +35,16 @@ public class TicketManager {
             return false;
         }
 
-        if (!"ABERTO".equals(ticket.getStatus())) {
+        if (!"ABERTO".equals(ticket.getStatus()) && !"EM_ATENDIMENTO".equals(ticket.getStatus())) {
             return false;
         }
 
-        ticket.setTecnicoNome(tecnicoNome);
-        ticket.setStatus("EM_ATENDIMENTO");
-        return true;
+        if (ticket.getTecnicoNome() == null) {
+            ticket.setTecnicoNome(tecnicoNome);
+            ticket.setStatus("EM_ATENDIMENTO");
+            return true;
+        }
+
+        return ticket.getTecnicoNome().equals(tecnicoNome);
     }
 }
