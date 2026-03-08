@@ -1,5 +1,6 @@
 package br.com.supportchat.server;
 
+import br.com.supportchat.util.CryptoUtils;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -25,12 +26,17 @@ public class ClientHandler implements Runnable {
 
             while ((message = reader.readLine()) != null) {
 
-                System.out.println("Mensagem recebida: " + message);
+                String decrypted = CryptoUtils.decrypt(message);
+
+                System.out.println("Mensagem recebida (criptografada): " + message);
+                System.out.println("Mensagem descriptografada: " + decrypted);
 
             }
 
         } catch (IOException e) {
+
             System.out.println("Cliente desconectado.");
+
         }
     }
 }
