@@ -283,7 +283,7 @@ Exemplo:
 
 ------------------------------------------------------------------------
 
-# 👩‍💻 Autora
+# 👥 Integrantes do Projeto
 
-Sara\
-Estudante de Engenharia de Software
+- **Sara Thais** – Desenvolvimento do sistema, arquitetura cliente-servidor, criptografia e interface gráfica.
+- **Gabriel Penha** – Apresentação do projeto e validação funcional do sistema.
