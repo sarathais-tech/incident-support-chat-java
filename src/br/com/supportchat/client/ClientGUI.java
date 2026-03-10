@@ -5,6 +5,14 @@ import javax.swing.*;
 
 public class ClientGUI extends JFrame {
 
+    private final JTextArea txtTechGlobal = new JTextArea(8, 40);
+    private final JTextField txtMensagemGlobal = new JTextField(30);
+
+    private final JButton btnRegistrarTecnico = new JButton("Entrar no Chat Técnico");
+    private final JButton btnEnviarGlobal = new JButton("Enviar Global");
+
+    private ClientConnection technicalGlobalConnection;
+
     private final JTextField txtNome = new JTextField(15);
     private final JTextField txtHost = new JTextField("127.0.0.1", 12);
     private final JTextField txtPorta = new JTextField("5000", 6);
@@ -79,7 +87,23 @@ public class ClientGUI extends JFrame {
 
         add(topPanel, BorderLayout.NORTH);
 
-        JPanel centerPanel = new JPanel(new GridLayout(3, 1));
+        JPanel centerPanel = new JPanel(new GridLayout(4, 1));
+
+        JPanel techPanel = new JPanel(new BorderLayout());
+        techPanel.setBorder(BorderFactory.createTitledBorder("Chat Global dos Técnicos"));
+        txtTechGlobal.setEditable(false);
+        txtTechGlobal.setLineWrap(true);
+        txtTechGlobal.setWrapStyleWord(true);
+
+        JPanel techInputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        techInputPanel.add(txtMensagemGlobal);
+        techInputPanel.add(btnRegistrarTecnico);
+        techInputPanel.add(btnEnviarGlobal);
+
+        techPanel.add(new JScrollPane(txtTechGlobal), BorderLayout.CENTER);
+        techPanel.add(techInputPanel, BorderLayout.SOUTH);
+
+        centerPanel.add(techPanel);
 
         JPanel descriptionPanel = new JPanel(new BorderLayout());
         descriptionPanel.setBorder(BorderFactory.createTitledBorder("Descrição"));
@@ -133,6 +157,9 @@ public class ClientGUI extends JFrame {
         btnAssumirTicket.addActionListener(e -> assumirTicket());
         btnConectarChat.addActionListener(e -> conectarChat());
         btnEnviarMensagem.addActionListener(e -> enviarMensagemChat());
+
+        btnRegistrarTecnico.addActionListener(e -> registrarTecnicoGlobal());
+        btnEnviarGlobal.addActionListener(e -> enviarMensagemGlobal());
     }
 
     private void updateMode() {
@@ -145,6 +172,103 @@ public class ClientGUI extends JFrame {
         btnListarTickets.setEnabled(!cliente);
         btnAssumirTicket.setEnabled(!cliente);
         txtTicketId.setEnabled(true);
+
+        btnRegistrarTecnico.setEnabled(!cliente);
+        btnEnviarGlobal.setEnabled(!cliente);
+        txtMensagemGlobal.setEnabled(!cliente);
+        txtTechGlobal.setEnabled(true);
+    }
+
+    private void registrarTecnicoGlobal() {
+        String nome = txtNome.getText().trim();
+
+        if (nome.isEmpty()) {
+            appendOutput("Informe o nome do técnico.");
+            return;
+        }
+
+        if (!rbTecnico.isSelected()) {
+            appendOutput("Apenas técnicos podem entrar no chat global.");
+            return;
+        }
+
+        if (technicalGlobalConnection != null) {
+            appendOutput("O técnico já está conectado ao chat global.");
+            return;
+        }
+
+        technicalGlobalConnection = createConnection();
+        if (technicalGlobalConnection == null) {
+            return;
+        }
+
+        String response = technicalGlobalConnection.sendAndReceive("REGISTRAR_TECNICO|" + nome);
+        appendOutput("Resposta do servidor: " + response);
+
+        if (response.startsWith("ERRO|")) {
+            technicalGlobalConnection.disconnect();
+            technicalGlobalConnection = null;
+            return;
+        }
+    
+
+        btnRegistrarTecnico.setEnabled(false);
+        appendTechGlobal("Você entrou no chat global dos técnicos.");
+
+        technicalGlobalConnection.startListening(new ClientConnection.MessageListener() {
+            @Override
+            public void onMessageReceived(String message) {
+                SwingUtilities.invokeLater(() -> handleIncomingTechGlobalMessage(message));
+            }
+
+            @Override
+            public void onError(String error) {
+                SwingUtilities.invokeLater(() -> {
+                    appendOutput(error);
+                    btnRegistrarTecnico.setEnabled(true);
+                    technicalGlobalConnection = null;
+                });
+            }
+        
+        });
+    }
+
+    private void enviarMensagemGlobal() {
+        if (technicalGlobalConnection == null) {
+            appendOutput("Conecte primeiro no chat global dos técnicos.");
+            return;
+        }
+
+        String nome = txtNome.getText().trim();
+        String mensagem = txtMensagemGlobal.getText().trim();
+
+        if (nome.isEmpty()) {
+            appendOutput("Informe o nome do técnico.");
+            return;
+        }
+
+        if (mensagem.isEmpty()) {
+            appendOutput("Informe a mensagem.");
+            return;
+        }
+
+        technicalGlobalConnection.sendOnly("TEC_GLOBAL|" + nome + "|" + mensagem);
+        txtMensagemGlobal.setText("");
+    }
+
+    private void handleIncomingTechGlobalMessage(String message) {
+        if (message.startsWith("TEC_GLOBAL|")) {
+            String[] parts = message.split("\\|", 3);
+            if (parts.length == 3) {
+             appendTechGlobal(parts[1] + ": " + parts[2]);
+            }
+        } else {
+            appendOutput("Resposta do servidor: " + message);
+        }
+    }
+
+    private void appendTechGlobal(String text) {
+        txtTechGlobal.append(text + "\n");
     }
 
     private ClientConnection createConnection() {

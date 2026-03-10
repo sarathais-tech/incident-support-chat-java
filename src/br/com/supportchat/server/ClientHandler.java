@@ -15,6 +15,7 @@ public class ClientHandler implements Runnable {
 
     private static final Map<Integer, PrintWriter> clientTicketWriters = new ConcurrentHashMap<>();
     private static final Map<Integer, PrintWriter> technicianTicketWriters = new ConcurrentHashMap<>();
+    private static final Map<String, PrintWriter> technicianGlobalWriters = new ConcurrentHashMap<>();
 
     private final Socket socket;
     private final TicketManager ticketManager;
@@ -56,46 +57,18 @@ public class ClientHandler implements Runnable {
             return processListTickets();
         } else if (decrypted.startsWith("ASSUMIR|")) {
             return processAssignTicket(decrypted, writer);
-        }else if (decrypted.startsWith("REGISTRAR_CLIENTE|")) {
+        } else if (decrypted.startsWith("REGISTRAR_CLIENTE|")) {
             return processRegisterClient(decrypted, writer);
+        } else if (decrypted.startsWith("REGISTRAR_TECNICO|")) {
+            return processRegisterTechnician(decrypted, writer);
+        } else if (decrypted.startsWith("TEC_GLOBAL|")) {
+            return processTechnicianGlobalMessage(decrypted);
         } else if (decrypted.startsWith("CHAT|")) {
             return processChatMessage(decrypted);
         } else {
             System.out.println("Mensagem comum recebida: " + decrypted);
             return "OK|Mensagem recebida";
-        } 
-    }
-
-    private String processRegisterClient(String decrypted, PrintWriter writer) {
-        String[] parts = decrypted.split("\\|", 3);
-
-        if (parts.length != 3) {
-            return "ERRO|Formato de registro de cliente inválido";
         }
-
-        String clienteNome = parts[1];
-        int ticketId;
-
-        try {
-            ticketId = Integer.parseInt(parts[2]);
-        } catch (NumberFormatException e) {
-            return "ERRO|ID do ticket inválido";
-        }
-
-        Ticket ticket = ticketManager.findById(ticketId);
-        if (ticket == null) {
-            return "ERRO|Ticket não encontrado";
-        }
-
-        if (!ticket.getClienteNome().equals(clienteNome)) {
-            return "ERRO|Cliente não autorizado para esse ticket";
-        }
-
-        clientTicketWriters.put(ticketId, writer);
-
-        System.out.println("[CHAT] Cliente " + clienteNome + " registrado no ticket " + ticketId);
-
-        return "OK|Cliente registrado no chat do ticket " + ticketId;
     }
 
     private String processTicketCreation(String decrypted, PrintWriter writer) {
@@ -116,6 +89,8 @@ public class ClientHandler implements Runnable {
             System.out.println("Descrição: " + ticket.getDescricao());
             System.out.println("Status: " + ticket.getStatus());
             System.out.println("=====================");
+
+            notifyTechniciansNewTicket(ticket);
 
             return "OK|Ticket criado com ID " + ticket.getId();
         }
@@ -182,6 +157,10 @@ public class ClientHandler implements Runnable {
                     ));
                 }
 
+                notifyTechniciansGlobal(
+                        "TEC_GLOBAL|Sistema|Ticket " + ticketId + " foi assumido por " + tecnicoNome
+                );
+
                 return "OK|Ticket " + ticketId + " assumido com sucesso";
             }
 
@@ -189,6 +168,77 @@ public class ClientHandler implements Runnable {
         }
 
         return "ERRO|Formato de atribuição inválido";
+    }
+
+    private String processRegisterClient(String decrypted, PrintWriter writer) {
+        String[] parts = decrypted.split("\\|", 3);
+
+        if (parts.length != 3) {
+            return "ERRO|Formato de registro de cliente inválido";
+        }
+
+        String clienteNome = parts[1];
+        int ticketId;
+
+        try {
+            ticketId = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException e) {
+            return "ERRO|ID do ticket inválido";
+        }
+
+        Ticket ticket = ticketManager.findById(ticketId);
+        if (ticket == null) {
+            return "ERRO|Ticket não encontrado";
+        }
+
+        if (!ticket.getClienteNome().equals(clienteNome)) {
+            return "ERRO|Cliente não autorizado para esse ticket";
+        }
+
+        clientTicketWriters.put(ticketId, writer);
+
+        System.out.println("[CHAT] Cliente " + clienteNome + " registrado no ticket " + ticketId);
+
+        return "OK|Cliente registrado no chat do ticket " + ticketId;
+    }
+
+    private String processRegisterTechnician(String decrypted, PrintWriter writer) {
+        String[] parts = decrypted.split("\\|", 2);
+
+        if (parts.length != 2) {
+            return "ERRO|Formato de registro de técnico inválido";
+        }
+
+        String tecnicoNome = parts[1].trim();
+
+        if (tecnicoNome.isEmpty()) {
+            return "ERRO|Nome do técnico inválido";
+        }
+
+        technicianGlobalWriters.put(tecnicoNome, writer);
+
+        System.out.println("[TECNICO] " + tecnicoNome + " registrado no chat global.");
+
+        return "OK|Técnico registrado no chat global";
+    }
+
+    private String processTechnicianGlobalMessage(String decrypted) {
+        String[] parts = decrypted.split("\\|", 3);
+
+        if (parts.length != 3) {
+            return "ERRO|Formato de mensagem global inválido";
+        }
+
+        String tecnicoNome = parts[1];
+        String chatMessage = parts[2];
+
+        String formattedMessage = "TEC_GLOBAL|" + tecnicoNome + "|" + chatMessage;
+
+        notifyTechniciansGlobal(formattedMessage);
+
+        System.out.println("[CHAT TECNICOS] " + tecnicoNome + ": " + chatMessage);
+
+        return "OK|Mensagem global enviada";
     }
 
     private String processChatMessage(String decrypted) {
@@ -235,5 +285,19 @@ public class ClientHandler implements Runnable {
         }
 
         return "ERRO|Usuário não autorizado para esse ticket";
+    }
+
+    private void notifyTechniciansNewTicket(Ticket ticket) {
+        String message = "TEC_GLOBAL|Sistema|Novo ticket #" + ticket.getId()
+                + " aberto por " + ticket.getClienteNome()
+                + " | Categoria: " + ticket.getCategoria();
+
+        notifyTechniciansGlobal(message);
+    }
+
+    private void notifyTechniciansGlobal(String plainMessage) {
+        for (PrintWriter technicianWriter : technicianGlobalWriters.values()) {
+            technicianWriter.println(CryptoUtils.encrypt(plainMessage));
+        }
     }
 }
