@@ -36,6 +36,7 @@ public class ClientGUI extends JFrame {
     private final JButton btnAssumirTicket = new JButton("Assumir Ticket");
     private final JButton btnConectarChat = new JButton("Conectar Chat");
     private final JButton btnEnviarMensagem = new JButton("Enviar Mensagem");
+    private final JButton btnResolverTicket = new JButton("Resolver Ticket");
 
     private ClientConnection persistentConnection;
     private Integer currentChatTicketId = null;
@@ -144,6 +145,7 @@ public class ClientGUI extends JFrame {
         buttonPanel.add(btnAbrirTicket);
         buttonPanel.add(btnListarTickets);
         buttonPanel.add(btnAssumirTicket);
+        buttonPanel.add(btnResolverTicket);
 
         add(buttonPanel, BorderLayout.SOUTH);
     }
@@ -157,6 +159,7 @@ public class ClientGUI extends JFrame {
         btnAssumirTicket.addActionListener(e -> assumirTicket());
         btnConectarChat.addActionListener(e -> conectarChat());
         btnEnviarMensagem.addActionListener(e -> enviarMensagemChat());
+        btnResolverTicket.addActionListener(e -> resolverTicket());
 
         btnRegistrarTecnico.addActionListener(e -> registrarTecnicoGlobal());
         btnEnviarGlobal.addActionListener(e -> enviarMensagemGlobal());
@@ -366,6 +369,36 @@ public class ClientGUI extends JFrame {
 
         String request = "ASSUMIR|" + nome + "|" + ticketId;
         String response = connection.sendAndReceive(request);
+        connection.disconnect();
+
+        appendOutput("Resposta do servidor: " + response);
+    }
+
+    private void resolverTicket() {
+
+        String nome = txtNome.getText().trim();
+        String ticketId = txtTicketId.getText().trim();
+
+        if (nome.isEmpty()) {
+            appendOutput("Informe o nome do técnico.");
+            return;
+        }
+
+        if (ticketId.isEmpty()) {
+            appendOutput("Informe o ID do ticket.");
+            return;
+        }
+    
+
+        ClientConnection connection = createConnection();
+        if (connection == null) {
+            return;
+        }
+
+        String request = "RESOLVER|" + nome + "|" + ticketId;
+
+        String response = connection.sendAndReceive(request);
+
         connection.disconnect();
 
         appendOutput("Resposta do servidor: " + response);

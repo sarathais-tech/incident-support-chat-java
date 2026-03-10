@@ -47,4 +47,23 @@ public class TicketManager {
 
         return ticket.getTecnicoNome().equals(tecnicoNome);
     }
+
+    public synchronized boolean resolveTicket(int ticketId, String tecnicoNome) {
+        Ticket ticket = findById(ticketId);
+
+        if (ticket == null) {
+            return false;
+        }
+
+        if (!"EM_ATENDIMENTO".equals(ticket.getStatus())) {
+            return false;
+        }
+
+        if (!tecnicoNome.equals(ticket.getTecnicoNome())) {
+            return false;
+        }
+
+        ticket.setStatus("RESOLVIDO");
+        return true;
+    }
 }

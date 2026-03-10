@@ -65,6 +65,8 @@ public class ClientHandler implements Runnable {
             return processTechnicianGlobalMessage(decrypted);
         } else if (decrypted.startsWith("CHAT|")) {
             return processChatMessage(decrypted);
+        } else if (decrypted.startsWith("RESOLVER|")) {
+            return processResolveTicket(decrypted);
         } else {
             System.out.println("Mensagem comum recebida: " + decrypted);
             return "OK|Mensagem recebida";
@@ -239,6 +241,49 @@ public class ClientHandler implements Runnable {
         System.out.println("[CHAT TECNICOS] " + tecnicoNome + ": " + chatMessage);
 
         return "OK|Mensagem global enviada";
+    }
+
+    private String processResolveTicket(String decrypted) {
+
+        String[] parts = decrypted.split("\\|", 3);
+
+        if (parts.length != 3) {
+            return "ERRO|Formato de resolução inválido";
+        }
+
+        String tecnicoNome = parts[1];
+        int ticketId;
+
+        try {
+            ticketId = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException e) {
+            return "ERRO|ID do ticket inválido";
+        }
+
+        boolean resolved = ticketManager.resolveTicket(ticketId, tecnicoNome);
+
+        if (!resolved) {
+            return "ERRO|Não foi possível resolver o ticket";
+        }
+
+        System.out.println("=== TICKET RESOLVIDO ===");
+        System.out.println("Ticket #" + ticketId + " resolvido por " + tecnicoNome);
+        System.out.println("========================");
+
+        PrintWriter clientWriter = clientTicketWriters.get(ticketId);
+
+        if (clientWriter != null) {
+            clientWriter.println(CryptoUtils.encrypt(
+                "CHAT|Sistema|Seu ticket #" + ticketId + " foi resolvido por " + tecnicoNome
+            ));
+        }
+    
+
+        notifyTechniciansGlobal(
+                "TEC_GLOBAL|Sistema|Ticket " + ticketId + " foi resolvido por " + tecnicoNome
+        );
+
+        return "OK|Ticket resolvido";
     }
 
     private String processChatMessage(String decrypted) {
